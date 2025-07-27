@@ -1,128 +1,126 @@
-import sys
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
-    QTableWidget, QTableWidgetItem, QGroupBox, QLineEdit, QPushButton
-)
-from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt
+import yfinance as yf
+import pandas as pd
 
-class StockTradingApp(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Stock Trading App")
-        self.setGeometry(100, 100, 900, 600)
+def calcular_rsi(data, periodos=14):
+    """Calcula el Índice de Fuerza Relativa (RSI)"""
+    delta = data['Close'].diff()
+    ganancia = delta.where(delta > 0, 0)
+    perdida = -delta.where(delta < 0, 0)
+    
+    avg_ganancia = ganancia.ewm(alpha=1/periodos, adjust=False).mean()
+    avg_perdida = perdida.ewm(alpha=1/periodos, adjust=False).mean()
+    
+    rs = avg_ganancia / avg_perdida
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
 
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout()
-        central_widget.setLayout(layout)
+def analizar_ticker(ticker):
+    """Descarga datos y calcula indicadores para un ticker"""
+    try:
+        # Descargar datos históricos
+        data = yf.download(ticker, period="12mo", progress=False, auto_adjust=True)
+        
+        if data.empty:
+            return None
+        
+        # Calcular indicadores técnicos
 
-        # Top section: Alerts and Portfolio
-        top_layout = QHBoxLayout()
-        top_layout.addWidget(self.create_alerts_table())
-        top_layout.addWidget(self.create_portfolio_table())
-        layout.addLayout(top_layout)
+        # Medias Móviles (Golden/Death Cross)
+        data['SMA21'] = data['Close'].rolling(window=21).mean().fillna(0)
+        data['SMA50'] = data['Close'].rolling(window=50).mean().fillna(0)
+        data['SMA200'] = data['Close'].rolling(window=200).mean().fillna(0)
+        
+        # RSI 14 y 21 días
+        data['RSI14'] = calcular_rsi(data, 14)
+        data['RSI21'] = calcular_rsi(data, 21)
 
-        # Bottom section: Trade panel and Graph
-        bottom_layout = QHBoxLayout()
-        bottom_layout.addWidget(self.create_trade_panel())
-        bottom_layout.addWidget(self.create_graph_info())
-        layout.addLayout(bottom_layout)
+        # EMA50
+        data['EMA50'] = data['Close'].ewm(span=50, adjust=False).mean().fillna(0)
+        
+        # Bollinger Bands
+        #data['Upper_BB'] = data['SMA21'].values + (2 * (data['Close'].rolling(21).std().values))
+        #data['Lower_BB'] = data['SMA21'] - 2 * data['Close'].rolling(21).std()
+        
+        # MACD
+        data['EMA12'] = data['Close'].ewm(span=12, adjust=False).mean().fillna(0)
+        data['EMA26'] = data['Close'].ewm(span=26, adjust=False).mean().fillna(0)
+        data['MACD'] = data['EMA12'] - data['EMA26']
+        data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean().fillna(0)
 
-    def create_alerts_table(self):
-        group = QGroupBox("Trade Alerts")
-        layout = QVBoxLayout()
-        table = QTableWidget(5, 2)
-        table.setHorizontalHeaderLabels(["Symbol", "Alert"])
-        data = [
-            ("AAPL", "Buy"),
-            ("GOOGL", "Sell"),
-            ("TSLA", "Buy"),
-            ("MSFT", "Sell"),
-            ("NFLX", "Sell"),
-        ]
-        for row, (symbol, alert) in enumerate(data):
-            table.setItem(row, 0, QTableWidgetItem(symbol))
-            alert_item = QTableWidgetItem(alert)
-            color = Qt.GlobalColor.green if alert == "Buy" else Qt.GlobalColor.red
-            alert_item.setBackground(color)
-            table.setItem(row, 1, alert_item)
+        # Obtener últimos valores
+        ultimo_cierre = data['Close'].iloc[-1].item()
+        sma21 = data['SMA21'].iloc[-1].item()
+        sma50 = data['SMA50'].iloc[-1].item()
+        sma200 = data['SMA200'].iloc[-1].item()
+        rsi14 = data['RSI14'].iloc[-1].item()
+        rsi21 = data['RSI21'].iloc[-1].item()
+        macd = data['MACD'].iloc[-1].item()
+        signal = data['Signal_Line'].iloc[-1].item()
+        
+        # Determinar señal
+        señal = "Mantener"
 
-        layout.addWidget(table)
-        group.setLayout(layout)
-        return group
+        if ultimo_cierre > sma200 and sma21>sma50 and rsi14 < 30 and rsi21 < 40 and macd > signal:
+            señal = "Compra fuerte"
+        elif ultimo_cierre < sma200 and sma21<sma50 and rsi14 > 60 and rsi21 > 40 and macd < signal:
+            señal = "Venta fuerte"
+        elif ultimo_cierre > sma21 and rsi14 < 70:
+            if rsi14 > 30:
+                señal = "Comprar"
+            else:
+                señal = "Sobreventa - Posible compra"
+        elif ultimo_cierre < sma21 and rsi14 > 30:
+            if rsi14 < 70:
+                señal = "Vender"
+            else:
+                señal = "Sobrecompra - Posible venta"
 
-    def create_portfolio_table(self):
-        group = QGroupBox("Portfolio")
-        layout = QVBoxLayout()
-        table = QTableWidget(3, 2)
-        table.setHorizontalHeaderLabels(["Symbol", "Value"])
-        data = [
-            ("AAPL", "10,500.00"),
-            ("MSFT", "5,350.00"),
-            ("TSLA", "2,000.00"),
-        ]
-        for row, (symbol, value) in enumerate(data):
-            table.setItem(row, 0, QTableWidgetItem(symbol))
-            table.setItem(row, 1, QTableWidgetItem(value))
+        return {
+            'Ticker': ticker,
+            'Cierre': round(ultimo_cierre, 2),
+            'SMA21': round(sma21, 2),
+            'SMA50': round(sma50, 2),
+            'SMA200': round(sma200, 2),
+            'RSI14': round(rsi14, 2),
+            'RSI21': round(rsi21, 2),
+            'MACD': (True if macd > signal else False),
+            'Señal': señal
+        }
+        
+    except Exception as e:
+        print(f"Error procesando {ticker}: {str(e)}")
+        return None
 
-        layout.addWidget(table)
-        group.setLayout(layout)
-        return group
+# Leer tickers desde archivo
+print("Iniciando programa...")
 
-    def create_trade_panel(self):
-        group = QGroupBox("Place Trade")
-        layout = QVBoxLayout()
+archivo_tickers = "config/watchlist.txt"  # Cambia al nombre de tu archivo
 
-        self.symbol_input = QLineEdit()
-        self.symbol_input.setPlaceholderText("Symbol")
+try:
+    with open(archivo_tickers, 'r') as f:
+        tickers = [line.strip() for line in f.readlines()]
+except FileNotFoundError:
+    print(f"Error: No se encontró el archivo {archivo_tickers}")
+    exit()
 
-        self.quantity_input = QLineEdit()
-        self.quantity_input.setPlaceholderText("Quantity")
+# Procesar cada ticker
+resultados = []
+i = 1
 
-        btn_layout = QHBoxLayout()
-        buy_btn = QPushButton("Buy")
-        sell_btn = QPushButton("Sell")
-        btn_layout.addWidget(buy_btn)
-        btn_layout.addWidget(sell_btn)
+print("Analizando acciones...")
 
-        layout.addWidget(QLabel("Symbol"))
-        layout.addWidget(self.symbol_input)
-        layout.addWidget(QLabel("Quantity"))
-        layout.addWidget(self.quantity_input)
-        layout.addLayout(btn_layout)
-        group.setLayout(layout)
-        return group
+for ticker in tickers:
+    print(f"[{i}/{len(tickers)}]Analizando {ticker}")
+    i += 1
+    if ticker:  # Saltar líneas vacías
+        resultado = analizar_ticker(ticker)
+        if resultado:
+            resultados.append(resultado)
 
-    def create_graph_info(self):
-        group = QGroupBox("AAPL")
-        layout = QVBoxLayout()
-
-        graph_label = QLabel()
-        graph_label.setFixedHeight(150)
-        graph_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
-        graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        graph_label.setText("Graph Placeholder")
-
-        price = QLabel("Price: AAPL   $150.25")
-        high = QLabel("High: AAPL    $151.80")
-        low = QLabel("Day's Low:    $148.50")
-
-        font = QFont()
-        font.setPointSize(10)
-        for label in (price, high, low):
-            label.setFont(font)
-
-        layout.addWidget(graph_label)
-        layout.addWidget(price)
-        layout.addWidget(high)
-        layout.addWidget(low)
-        group.setLayout(layout)
-        return group
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = StockTradingApp()
-    window.show()
-    sys.exit(app.exec())
+# Mostrar resultados
+if resultados:
+    df = pd.DataFrame(resultados)
+    print("\nResultados del análisis técnico:")
+    print(df.to_string(index=False))
+else:
+    print("No se obtuvieron resultados válidos")
