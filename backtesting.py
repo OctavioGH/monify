@@ -39,103 +39,29 @@ def probar(ticker):
     # ================================================================
     # 5. On-Balance Volume (OBV)
     # ================================================================
-    # === Calcular OBV ===
-    df["OBV"] = 0
-    #df["Direction"] = np.where(df["Close"] > df["Close"].shift(1), 1, np.where(df["Close"] < df["Close"].shift(1), -1, 0))
-    df['Direction'] = np.where(df['Close'].values > df['Close'].shift(1).values, 1)
-    df['Direction'] = np.where(df['Close'].values < df['Close'].shift(1).values, -1)
-    print(df['Direction'])
-    
-    df["OBV"] = (df["Volume"].values * df["Direction"].values).cumsum()
+    df["OBV"] = 0  # Primer valor por defecto
 
-    # === Suavizar OBV con media móvil ===
-    df["OBV_MA"] = df["OBV"].rolling(window=10).mean()
+    for i in range(1, len(df)):
+        if df["Close"].iloc[i].item() > df["Close"].iloc[i - 1].item():
+            df.loc[df.index[i], "OBV"] = df["OBV"].iloc[i - 1].item() + df["Volume"].iloc[i].item()
+        elif df["Close"].iloc[i].item() < df["Close"].iloc[i - 1].item():
+            df.loc[df.index[i], "OBV"] = df["OBV"].iloc[i - 1].item() - df["Volume"].iloc[i].item()
+        else:
+            df.loc[df.index[i], "OBV"] = df["OBV"].iloc[i - 1].item()
 
-    """
-    print(" ---------- Estrategia SMA21 ---------- ")
-
-    ganancia = 0
-    compre = False
-    precio_compra = 0
-    cantidad_compras = 0
-    cantidad_ventas = 0
-
-    for precio, sma in zip(df['Close'].values[21:], df['SMA21'].values[21:]):
-
-        #print(f"Precio: {round(precio[0],2)} ; SMA21: {round(sma,2)}")
-
-        if precio[0] > sma and not compre:
-            compre = True
-            cantidad_compras += 1
-            precio_compra = precio[0]
-        elif precio[0] < sma and compre:
-            compre = False
-            cantidad_ventas += 1
-            ganancia += (precio[0] - precio_compra)
-            #print(ganancia)
-
-    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia,2)}")
-
-    print(" ---------- Estrategia SMA21 + RSI14 ---------- ")
-
-    ganancia = 0
-    compre = False
-    precio_compra = 0
-    cantidad_compras = 0
-    cantidad_ventas = 0
-
-    for precio, sma21, rsi in zip(df['Close'].values[21:], df['SMA21'].values[21:], df['RSI'].values[21:]):
-
-        #print(f"Precio: {round(precio[0],2)} ; SMA21: {round(sma,2)}")
-
-        if precio[0] > sma21 and rsi < 50 and not compre:
-            compre = True
-            cantidad_compras += 1
-            precio_compra = precio[0]
-        elif precio[0] < sma21 and rsi > 50 and compre:
-            compre = False
-            cantidad_ventas += 1
-            ganancia += (precio[0] - precio_compra)
-            #print(ganancia)
-
-    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia,2)}")
-
-    print(" ---------- Estrategia MACD ---------- ")
-
-    ganancia = 0
-    compre = False
-    precio_compra = 0
-    cantidad_compras = 0
-    cantidad_ventas = 0
-
-    for precio, signal, macd in zip(df['Close'].values[26:], df['MACD'].values[26:], df['Signal_Line'].values[26:]):
-
-        #print(f"Precio: {round(precio[0],2)} ; SMA21: {round(sma,2)}")
-
-        if macd > signal and not compre:
-            compre = True
-            cantidad_compras += 1
-            precio_compra = precio[0]
-        elif macd < signal and compre:
-            compre = False
-            cantidad_ventas += 1
-            ganancia += (precio[0] - precio_compra)
-            #print(ganancia)
-
-    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia,2)}")
-    """
+    df["OBV_10"] = df["OBV"].rolling(window=5).mean().fillna(0)
 
     print("\n ---------- Estrategia SMA21 + RSI14 + MACD ---------- \n")
 
-    ganancia = 0
+    ganancia_old = 0
     compre = False
     precio_compra = 0
     cantidad_compras = 0
     cantidad_ventas = 0
+    trade_positivo_old = 0
+    trade_negativo_old = 0
 
-    for precio, sma21, rsi, macd, signal in zip(df['Close'].values[21:], df['SMA21'].values[21:], df['RSI'].values[21:], df['MACD'].values[26:], df['Signal_Line'].values[26:]):
-
-        #print(f"Precio: {round(precio[0],2)} ; SMA21: {round(sma,2)}")
+    for precio, sma21, rsi, macd, signal, obv, obvma in zip(df['Close'].values[21:], df['SMA21'].values[21:], df['RSI'].values[21:], df['MACD'].values[26:], df['Signal_Line'].values[26:], df['OBV'].values[26:], df['OBV_10'].values[26:]):
 
         if precio[0] > sma21 and rsi < 60 and macd > signal and not compre:
             compre = True
@@ -144,51 +70,48 @@ def probar(ticker):
         elif (precio[0] < sma21 or macd < signal) and rsi > 60 and compre:
             compre = False
             cantidad_ventas += 1
-            ganancia += (precio[0] - precio_compra)
-            #print(ganancia)
+            ganancia_old += (precio[0] - precio_compra)
+            if (precio[0] - precio_compra) > 0:
+                trade_positivo_old += 1
+            else:
+                trade_negativo_old += 1
 
-    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia,2)}")
-    """
+    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia_old,2)} ; Trade pos: {trade_positivo_old} ; Trade neg: {trade_negativo_old}")
 
-    print("\n ---------- Estrategia SMA21 + RSI14 + MACD + Stop Loss---------- \n")
+    print("\n ---------- Estrategia SMA21 + RSI14 + MACD + OBV10 ---------- \n")
 
     ganancia = 0
     compre = False
     precio_compra = 0
     cantidad_compras = 0
     cantidad_ventas = 0
+    trade_positivo = 0
+    trade_negativo = 0
+
+    stop_loss = 0
     precio_max = 0
-    stop_loss = 0.30
 
-    for precio, sma21, rsi, macd, signal in zip(df['Close'].values[21:], df['SMA21'].values[21:], df['RSI'].values[21:], df['MACD'].values[26:], df['Signal_Line'].values[26:]):
+    for precio, sma21, rsi, macd, signal, obv, obvma in zip(df['Close'].values[21:], df['SMA21'].values[21:], df['RSI'].values[21:], df['MACD'].values[26:], df['Signal_Line'].values[26:], df['OBV'].values[26:], df['OBV_10'].values[26:]):
 
-        #print(f"Precio: {round(precio[0],2)} ; SMA21: {round(sma,2)}")
-
-        if precio[0] > sma21 and rsi < 60 and macd > signal and not compre:
+        if precio[0] > sma21 and rsi < 60 and rsi > 30 and macd > signal and obv > obvma and not compre:
             compre = True
             cantidad_compras += 1
             precio_compra = precio[0]
-        elif (precio[0] < sma21 or macd < signal) and rsi > 60 and compre:
+        elif (precio[0] < sma21 or macd < signal) and rsi > 65 and compre:
             compre = False
             cantidad_ventas += 1
             ganancia += (precio[0] - precio_compra)
-            #print(ganancia)
+            if (precio[0] - precio_compra) > 0:
+                trade_positivo += 1
+            else:
+                trade_negativo += 1
 
-        if compre:
-            if precio[0] > precio_max:
-                precio_max = precio[0]
-            elif (precio_max - precio[0]) > (precio_max*stop_loss):
-                #print("Stop_loss")
-                compre = False
-                cantidad_ventas += 1
-                ganancia += (precio[0] - precio_compra)
-                precio_max = 0
+        if compre and precio[0] > precio_max:
+            precio_max = precio[0]
 
-    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia,2)}")
-
-    """
-
-    return ganancia
+    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia,2)} ; Trade pos: {trade_positivo} ; Trade neg: {trade_negativo}")
+   
+    return trade_positivo_old , trade_negativo_old , ganancia_old, trade_positivo , trade_negativo , ganancia
 
 # Leer tickers desde archivo
 print("Iniciando programa...")
@@ -203,13 +126,28 @@ except FileNotFoundError:
     exit()
 
 print("Analizando acciones...")
+trade_pos = 0
+trade_neg = 0
 ganancia = 0
+
+trade_pos_old = 0
+trade_neg_old = 0
+ganancia_old = 0
+
+i = 1
 for ticker in tickers:
-    print(f"\n \n Analizando {ticker}")
+    print(f"\n \n[{i}/{len(tickers)}]Analizando {ticker}")
+    i += 1
 
-    ganancia += probar(ticker)
+    trade_pos_old_aux , trade_neg_old_aux , aux_old , trade_pos_aux , trade_neg_aux , aux = probar(ticker)
 
-ganancia_prom = (ganancia / len(tickers))
+    trade_pos += trade_pos_aux
+    trade_neg += trade_neg_aux
+    ganancia += aux
 
-print(f"\n Ganancia total: {ganancia}")
-print(f"Ganancia promedio: {ganancia_prom}")
+    trade_pos_old += trade_pos_old_aux
+    trade_neg_old += trade_neg_old_aux
+    ganancia_old += aux_old
+
+print(f"\nGanancia: {round(ganancia,2)} ; Trade pos: {trade_pos} ; Trade neg: {trade_neg} ; Error: {round(trade_neg/(trade_neg+trade_pos)*100,2)}")
+print(f"Ganancia old: {round(ganancia_old,2)} ; Trade pos: {trade_pos_old} ; Trade neg: {trade_neg_old} ; Error: {round(trade_neg_old/(trade_neg_old+trade_pos_old)*100,2)}")
