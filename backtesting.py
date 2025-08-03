@@ -49,7 +49,7 @@ def probar(ticker):
         else:
             df.loc[df.index[i], "OBV"] = df["OBV"].iloc[i - 1].item()
 
-    df["OBV_10"] = df["OBV"].rolling(window=5).mean().fillna(0)
+    df["OBV_10"] = df["OBV"].rolling(window=10).mean().fillna(0)
 
     print("\n ---------- Estrategia SMA21 + RSI14 + MACD ---------- \n")
 
@@ -61,7 +61,7 @@ def probar(ticker):
     trade_positivo_old = 0
     trade_negativo_old = 0
 
-    for precio, sma21, rsi, macd, signal, obv, obvma in zip(df['Close'].values[21:], df['SMA21'].values[21:], df['RSI'].values[21:], df['MACD'].values[26:], df['Signal_Line'].values[26:], df['OBV'].values[26:], df['OBV_10'].values[26:]):
+    for precio, sma21, rsi, macd, signal, obv, obvma in zip(df['Close'].values[26:], df['SMA21'].values[26:], df['RSI'].values[26:], df['MACD'].values[26:], df['Signal_Line'].values[26:], df['OBV'].values[26:], df['OBV_10'].values[26:]):
 
         if precio[0] > sma21 and rsi < 60 and macd > signal and not compre:
             compre = True
@@ -78,7 +78,7 @@ def probar(ticker):
 
     print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia_old,2)} ; Trade pos: {trade_positivo_old} ; Trade neg: {trade_negativo_old}")
 
-    print("\n ---------- Estrategia SMA21 + RSI14 + MACD + OBV10 ---------- \n")
+    print("\n ---------- Estrategia SMA21 + RSI14 + MACD + OBV10 + SMA200---------- \n")
 
     ganancia = 0
     compre = False
@@ -91,9 +91,9 @@ def probar(ticker):
     stop_loss = 0
     precio_max = 0
 
-    for precio, sma21, rsi, macd, signal, obv, obvma in zip(df['Close'].values[21:], df['SMA21'].values[21:], df['RSI'].values[21:], df['MACD'].values[26:], df['Signal_Line'].values[26:], df['OBV'].values[26:], df['OBV_10'].values[26:]):
+    for precio, sma21, sma50, sma200, rsi, macd, signal, obv, obvma in zip(df['Close'].values[200:], df['SMA21'].values[200:], df['SMA50'].values[200:], df['SMA200'].values[200:], df['RSI'].values[200:], df['MACD'].values[200:], df['Signal_Line'].values[200:], df['OBV'].values[200:], df['OBV_10'].values[200:]):
 
-        if precio[0] > sma21 and rsi < 60 and rsi > 30 and macd > signal and obv > obvma and not compre:
+        if precio[0] > sma21 and rsi < 60 and rsi > 30 and macd > signal and obv > obvma and sma21 > sma50 and sma50 > sma200 and not compre:
             compre = True
             cantidad_compras += 1
             precio_compra = precio[0]
