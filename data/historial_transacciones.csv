@@ -1,1 +1,2 @@
-ticker,fecha,tipo,precio
+fecha,tipo,monto,cantidad,precio_unitario,ticker
+04/08/2025,compra,28000.0,1,28000.0,TSLA
