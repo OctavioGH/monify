@@ -1,4 +1,5 @@
 from datetime import datetime
+import yfinance as yf
 import pandas as pd
 import os
 
@@ -93,6 +94,32 @@ def mostrar_archivo(nombre_archivo):
     if df.empty:
         print(f"📂 El archivo {nombre_archivo} está vacío.")
         return
+    else:
+        titulo = "Historial de transacciones"
+        if "portafolio" in nombre_archivo:
+            titulo = "Portafolio"
+            # Obtener precios actuales para cada ticker
+            precios = []
+            
+            for ticker in df['ticker'].unique():
+                try:
+                    precio_actual = yf.Ticker(ticker+'.BA').info.get('regularMarketPrice')
+                    if precio_actual is None:
+                        precio_actual = float('nan')  # Por si no hay precio disponible
+                except Exception as e:
+                    print(f"Error obteniendo precio para {ticker}: {e}")
+                    precio_actual = float('nan')
+                precios.append((ticker, precio_actual))
 
-    print(df.to_string(index=False))
-    print()
+            # Crear un diccionario para mapear ticker -> precio
+            dict_precios = dict(precios)
+
+            # Crear nueva columna con el precio más reciente
+            df['precio_actual'] = df['ticker'].map(dict_precios)
+            
+            # Calcular diferencia porcentual
+            df['diferencia_pct'] = round(((df['precio_actual'] - df['precio_promedio']) / df['precio_promedio']) * 100, 2)
+
+        print(f"\n{titulo}")
+        print(df.to_string(index=False))
+        print()

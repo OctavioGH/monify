@@ -1,57 +1,86 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import talib as ta
+import core
 
 # === Parámetros ===
-ticker = "AAPL"           # Acción a analizar
+ticker = "AAPL.BA"           # Acción a analizar
 start_date = "2020-01-01" # Fecha de inicio del backtest
 end_date = "2025-07-01"   # Fecha de fin del backtest
+RUTA_DATOS = "data/historicos_acciones/"
 
-def calcular_rsi(df, periodos=14):
-    """Calcula el Índice de Fuerza Relativa (RSI)"""
-    delta = df['Close'].diff()
-    ganancia = delta.where(delta > 0, 0)
-    perdida = -delta.where(delta < 0, 0)
-    
-    avg_ganancia = ganancia.ewm(alpha=1/periodos, adjust=False).mean()
-    avg_perdida = perdida.ewm(alpha=1/periodos, adjust=False).mean()
-    
-    rs = avg_ganancia / avg_perdida
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+def calcular_sma(data, periodos:int):
+    return ta.SMA(data['Close'].values.astype(np.float64), timeperiod=periodos)
 
-def probar(ticker):
+def calcular_macd(data, periodo_corto = 12, periodo_largo = 26, periodo_señal = 9):
+    macd, macd_signal, macdhist = ta.MACD(data['Close'].values.astype(np.float64), periodo_corto, periodo_largo, periodo_señal)
+    return macd, macd_signal
+
+def calcular_rsi(data, periodos = 14):
+    return ta.RSI(data['Close'].values.astype(np.float64), timeperiod=periodos)
+
+def calcular_obv(data):
+    obv = ta.OBV(data['Close'].values.astype(np.float64), data['Volume'].values.astype(np.float64))
+    obv_ma = ta.SMA(obv, timeperiod=10)
+
+    return obv, obv_ma
+
+def calcular_adx(data, periodos=14):
+    return ta.ADX(data['High'].values.astype(np.float64), data['Low'].values.astype(np.float64), data['Close'].values.astype(np.float64), timeperiod=periodos)
+
+def calcular_bandas_bollinger(data, length=20, mult=2):
+    # Bollinger Bands con TA-Lib
+    upper_bb, middle_bb, lower_bb = ta.BBANDS(
+        data['Close'].values.astype(np.float64),
+        timeperiod=length,
+        nbdevup=mult,
+        nbdevdn=mult,
+        matype=0
+    )
+
+    """
+    # ATR con TA-Lib
+    atr = ta.ATR(
+        df['High'].values.astype(np.float64),
+        df['Low'].values.astype(np.float64),
+        df['Close'].values.astype(np.float64),
+        timeperiod=length
+    )
+
+    # Keltner Channels (SMA ± mult * ATR)
+    sma = ta.SMA(df['Close'].values.astype(np.float64), timeperiod=length)
+    upper_kc = sma + mult * atr
+    lower_kc = sma - mult * atr
+    """
+    return upper_bb, middle_bb, lower_bb
+
+def probar(df):
 
     # === Descargar datos de Yahoo Finance ===
-    df = yf.download(ticker, start=start_date, end=end_date, auto_adjust = True)
+    #df = yf.download(ticker, start=start_date, end=end_date, auto_adjust = True)
 
     # === Calcular SMA 21 ===
-    df["SMA21"] = df["Close"].rolling(window=21).mean().fillna(0)
-    df["SMA50"] = df["Close"].rolling(window=50).mean().fillna(0)
-    df["SMA200"] = df["Close"].rolling(window=200).mean().fillna(0)
+    df["SMA21"] = calcular_sma(df, 21)
+    #df["SMA50"] = calcular_sma(df, 21)
+    #df["SMA200"] = calcular_sma(df, 21)
     df['RSI'] = calcular_rsi(df, 14)
 
-    df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean().fillna(0)
-    df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean().fillna(0)
-    df['MACD'] = df['EMA12'] - df['EMA26']
-    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean().fillna(0)
+    df['MACD'], df['Signal_Line'] = calcular_macd(df)
 
     # ================================================================
     # 5. On-Balance Volume (OBV)
     # ================================================================
-    df["OBV"] = 0  # Primer valor por defecto
+    df["OBV"], df["OBV_10"] = calcular_obv(df)
 
-    for i in range(1, len(df)):
-        if df["Close"].iloc[i].item() > df["Close"].iloc[i - 1].item():
-            df.loc[df.index[i], "OBV"] = df["OBV"].iloc[i - 1].item() + df["Volume"].iloc[i].item()
-        elif df["Close"].iloc[i].item() < df["Close"].iloc[i - 1].item():
-            df.loc[df.index[i], "OBV"] = df["OBV"].iloc[i - 1].item() - df["Volume"].iloc[i].item()
-        else:
-            df.loc[df.index[i], "OBV"] = df["OBV"].iloc[i - 1].item()
+    df['upper_bb'], df['middle_bb'], df['lower_bb'] = calcular_bandas_bollinger(df)
 
-    df["OBV_10"] = df["OBV"].rolling(window=10).mean().fillna(0)
+    # ================================================================
+    # ADX
+    # ================================================================
+    df['ADX'] = calcular_adx(df)
 
-    print("\n ---------- Estrategia SMA21 + RSI14 + MACD ---------- \n")
+    #print("\n ---------- Estrategia SMA21 + RSI14 + MACD ---------- \n")
 
     ganancia_old = 0
     compre = False
@@ -61,24 +90,26 @@ def probar(ticker):
     trade_positivo_old = 0
     trade_negativo_old = 0
 
-    for precio, sma21, rsi, macd, signal, obv, obvma in zip(df['Close'].values[26:], df['SMA21'].values[26:], df['RSI'].values[26:], df['MACD'].values[26:], df['Signal_Line'].values[26:], df['OBV'].values[26:], df['OBV_10'].values[26:]):
+    inicio = 26
 
-        if precio[0] > sma21 and rsi < 60 and macd > signal and not compre:
+    for precio, sma21, rsi, macd, signal, obv, obvma in zip(df['Close'].values[26:].astype(np.float64), df['SMA21'].values[26:], df['RSI'].values[26:], df['MACD'].values[26:], df['Signal_Line'].values[26:], df['OBV'].values[26:], df['OBV_10'].values[26:]):
+
+        if precio > sma21 and rsi < 60 and macd > signal and not compre:
             compre = True
             cantidad_compras += 1
-            precio_compra = precio[0]
-        elif (precio[0] < sma21 or macd < signal) and rsi > 60 and compre:
+            precio_compra = precio
+        elif (precio < sma21 or macd < signal) and rsi > 60 and compre:
             compre = False
             cantidad_ventas += 1
-            ganancia_old += (precio[0] - precio_compra)
-            if (precio[0] - precio_compra) > 0:
+            ganancia_old += (precio - precio_compra)
+            if (precio - precio_compra) > 0:
                 trade_positivo_old += 1
             else:
                 trade_negativo_old += 1
 
-    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia_old,2)} ; Trade pos: {trade_positivo_old} ; Trade neg: {trade_negativo_old}")
+    #print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia_old,2)} ; Trade pos: {trade_positivo_old} ; Trade neg: {trade_negativo_old}")
 
-    print("\n ---------- Estrategia SMA21 + RSI14 + MACD + OBV10 + SMA200---------- \n")
+    #print("\n ---------- Estrategia SMA21 + RSI14 + MACD + OBV10 + ADX---------- \n")
 
     ganancia = 0
     compre = False
@@ -91,63 +122,102 @@ def probar(ticker):
     stop_loss = 0
     precio_max = 0
 
-    for precio, sma21, sma50, sma200, rsi, macd, signal, obv, obvma in zip(df['Close'].values[200:], df['SMA21'].values[200:], df['SMA50'].values[200:], df['SMA200'].values[200:], df['RSI'].values[200:], df['MACD'].values[200:], df['Signal_Line'].values[200:], df['OBV'].values[200:], df['OBV_10'].values[200:]):
+    precio_viejo = float(df['Close'].iloc[inicio])
 
-        if precio[0] > sma21 and rsi < 60 and rsi > 30 and macd > signal and obv > obvma and sma21 > sma50 and sma50 > sma200 and not compre:
+    tolerancia = 0.01
+
+    simultaneo = 0
+
+    for precio, sma21, rsi, macd, signal, obv, obvma, adx, upper, middle, lower in zip(df['Close'].values[inicio:].astype(np.float64), df['SMA21'].values[inicio:], df['RSI'].values[inicio:], df['MACD'].values[inicio:], df['Signal_Line'].values[inicio:], df['OBV'].values[inicio:], df['OBV_10'].values[inicio:], df['ADX'].values[inicio:], df['upper_bb'].values[inicio:], df['middle_bb'].values[inicio:], df['lower_bb'].values[inicio:]):
+
+        compra_sma = precio > sma21
+        compra_macd = macd > signal
+        compra_obv = (precio > precio_viejo and obv > obvma)
+        compra_rsi = (rsi < 60 and rsi > 30)
+        compra_adx = adx > 25
+        compra_bollinger = (abs(precio - lower) < (lower*tolerancia)) and upper > middle*(1+(2*tolerancia)) and lower < middle *(1+(2*tolerancia))
+        
+        venta_sma = precio < sma21
+        venta_macd = macd < signal
+        venta_obv = (precio < precio_viejo and obv < obvma)
+        venta_rsi = rsi > 70
+        venta_adx = adx > 25
+        venta_bollinger = (abs(precio - upper) < (upper*tolerancia)) and upper > middle*(1+(2*tolerancia)) and lower < middle *(1+(2*tolerancia))
+        
+        if compra_bollinger and venta_bollinger:
+            print(f"Precio: {precio} ; Upper: {upper} ; middle: {middle} ; lower: {lower}")
+            print(f"Compro: {compra_bollinger} ; Vendo: {venta_bollinger}")
+            simultaneo +=1
+
+        if (compra_sma or compra_macd or compra_obv or compra_bollinger) and compra_rsi and compra_adx and not compre:
             compre = True
             cantidad_compras += 1
-            precio_compra = precio[0]
-        elif (precio[0] < sma21 or macd < signal) and rsi > 65 and compre:
+            precio_compra = precio
+        elif (venta_sma or venta_macd or venta_obv or venta_bollinger) and venta_rsi and venta_adx and compre:
             compre = False
             cantidad_ventas += 1
-            ganancia += (precio[0] - precio_compra)
-            if (precio[0] - precio_compra) > 0:
+            ganancia += (precio - precio_compra)
+            if (precio - precio_compra) > 0:
                 trade_positivo += 1
             else:
                 trade_negativo += 1
 
-        if compre and precio[0] > precio_max:
-            precio_max = precio[0]
+        if compre and precio > precio_max:
+            precio_max = precio
 
-    print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia,2)} ; Trade pos: {trade_positivo} ; Trade neg: {trade_negativo}")
-   
+        precio_viejo = precio
+
+    #print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia,2)} ; Trade pos: {trade_positivo} ; Trade neg: {trade_negativo}")
+    #print(f"Simultaneo: {simultaneo}")
+
     return trade_positivo_old , trade_negativo_old , ganancia_old, trade_positivo , trade_negativo , ganancia
 
-# Leer tickers desde archivo
-print("Iniciando programa...")
+def descargar_datos(tickers):
+    for index, ticker in enumerate(tickers):
+        index += 1
+        print(f"{index}/{len(tickers)} Descargando...")
+        core.obtener_datos.descargar_datos(RUTA_DATOS, ticker, '5y')
 
-archivo_tickers = "config/watchlist.txt"  # Cambia al nombre de tu archivo
+if __name__ == "__main__":
 
-try:
-    with open(archivo_tickers, 'r') as f:
-        tickers = [line.strip() for line in f.readlines()]
-except FileNotFoundError:
-    print(f"Error: No se encontró el archivo {archivo_tickers}")
-    exit()
+    print("Iniciando programa...")
+    RUTA_TICKERS = "data/lista_acciones.txt"  # Cambia al nombre de tu archivo
 
-print("Analizando acciones...")
-trade_pos = 0
-trade_neg = 0
-ganancia = 0
+    try:
+        with open(RUTA_TICKERS, 'r') as f:
+            tickers = [line.strip() for line in f.readlines()]
+    except FileNotFoundError:
+        print(f"Error: No se encontró el archivo {RUTA_TICKERS}")
+        exit()
 
-trade_pos_old = 0
-trade_neg_old = 0
-ganancia_old = 0
+    # descargar_datos(tickers)
 
-i = 1
-for ticker in tickers:
-    print(f"\n \n[{i}/{len(tickers)}]Analizando {ticker}")
-    i += 1
+    #print("Analizando acciones...")
+    trade_pos = 0
+    trade_neg = 0
+    ganancia = 0
 
-    trade_pos_old_aux , trade_neg_old_aux , aux_old , trade_pos_aux , trade_neg_aux , aux = probar(ticker)
+    trade_pos_old = 0
+    trade_neg_old = 0
+    ganancia_old = 0
 
-    trade_pos += trade_pos_aux
-    trade_neg += trade_neg_aux
-    ganancia += aux
+    for index, ticker in enumerate(tickers):
+        index += 1
+        #print(f"\n \n[{index}/{len(tickers)}]Analizando {ticker}")
+        
+        nombre_archivo = RUTA_DATOS+ticker.split('.')[0]+'.csv'
+        data = core.obtener_datos.cargar_csv(nombre_archivo)
+        data = data.drop(index=[0, 1]).reset_index(drop=True)
 
-    trade_pos_old += trade_pos_old_aux
-    trade_neg_old += trade_neg_old_aux
-    ganancia_old += aux_old
+        trade_pos_old_aux , trade_neg_old_aux , aux_old , trade_pos_aux , trade_neg_aux , aux = probar(data)
 
-print(f"\nGanancia: {round(ganancia,2)} ; Trade pos: {trade_pos} ; Trade neg: {trade_neg} ; Error: {round(trade_neg/(trade_neg+trade_pos)*100,2)}")
-print(f"Ganancia old: {round(ganancia_old,2)} ; Trade pos: {trade_pos_old} ; Trade neg: {trade_neg_old} ; Error: {round(trade_neg_old/(trade_neg_old+trade_pos_old)*100,2)}")
+        trade_pos += trade_pos_aux
+        trade_neg += trade_neg_aux
+        ganancia += aux
+
+        trade_pos_old += trade_pos_old_aux
+        trade_neg_old += trade_neg_old_aux
+        ganancia_old += aux_old
+
+    print(f"\nGanancia: {round(ganancia,2)} ; Trade pos: {trade_pos} ; Trade neg: {trade_neg} ; Error: {round(trade_neg/(trade_neg+trade_pos)*100,2)}%")
+    print(f"Ganancia old: {round(ganancia_old,2)} ; Trade pos: {trade_pos_old} ; Trade neg: {trade_neg_old} ; Error: {round(trade_neg_old/(trade_neg_old+trade_pos_old)*100,2)}%")

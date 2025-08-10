@@ -33,6 +33,7 @@ def analizar_acciones():
         data = pd.DataFrame(resultados)
         print("\n--------------- Resultados del análisis técnico: ---------------\n")
         print(data.to_string(index=False))
+        print()
     else:
         print("No se obtuvieron resultados válidos")
 
@@ -43,7 +44,7 @@ if __name__ == "__main__":
     salir = False
     
     while not salir:
-        print("=== MONIFY ===")
+        print("========== MONIFY ==========")
         print("1 - Cargar transacción")
         print("2 - Mostrar portafolio")
         print("3 - Mostrar transacciones")
@@ -66,3 +67,5 @@ if __name__ == "__main__":
                 salir = True
             case _:
                 print("Opción no válida")
+
+    clear()
