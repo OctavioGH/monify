@@ -219,5 +219,7 @@ if __name__ == "__main__":
         trade_neg_old += trade_neg_old_aux
         ganancia_old += aux_old
 
-    print(f"\nGanancia: {round(ganancia,2)} ; Trade pos: {trade_pos} ; Trade neg: {trade_neg} ; Error: {round(trade_neg/(trade_neg+trade_pos)*100,2)}%")
+    print("---------- Estrategia SMA21 and OBV10 (or MACD or Bollinger) and RSI14 and ADX ----------")
+    print(f"Ganancia: {round(ganancia,2)} ; Trade pos: {trade_pos} ; Trade neg: {trade_neg} ; Error: {round(trade_neg/(trade_neg+trade_pos)*100,2)}%")
     print(f"Ganancia old: {round(ganancia_old,2)} ; Trade pos: {trade_pos_old} ; Trade neg: {trade_neg_old} ; Error: {round(trade_neg_old/(trade_neg_old+trade_pos_old)*100,2)}%")
+    print(f"Diferencia: {round(ganancia - ganancia_old,2)} ; Dif %: {round((ganancia - ganancia_old)*100/ganancia_old,2)} ; Trade pos: {trade_pos - trade_pos_old} ; Trade neg: {trade_neg - trade_neg_old} ; N Trades: {trade_pos+trade_neg- trade_neg_old - trade_pos_old}")

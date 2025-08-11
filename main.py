@@ -30,7 +30,7 @@ def analizar_acciones():
                 resultados.append(resultado)
 
     if resultados:
-        data = pd.DataFrame(resultados)
+        data = pd.DataFrame(resultados).sort_values(by='Señal', ascending=True)
         print("\n--------------- Resultados del análisis técnico: ---------------\n")
         print(data.to_string(index=False))
         print()
@@ -56,10 +56,8 @@ if __name__ == "__main__":
             case "1":
                 core.portafolio.cargar_transaccion(RUTA_TRANSACCIONES, RUTA_PORTAFOLIO)
             case "2":
-                print("\nPortafolio actual:\n")
                 core.portafolio.mostrar_archivo(RUTA_PORTAFOLIO)
             case "3":
-                print("\nHistorial de transacciones:\n")
                 core.portafolio.mostrar_archivo(RUTA_TRANSACCIONES)
             case "4":
                 analizar_acciones()

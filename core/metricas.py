@@ -4,39 +4,68 @@ import talib as ta
 import numpy as np
 
 def analizar_ticker(ticker):
-    # Descargar datos históricos
-    data = yf.download(ticker, period="12mo", progress=False, auto_adjust=True)
-    
-    if data.empty:
-        return None
-    
-    # Calcular indicadores técnicos
-    ultimo_cierre = precio_actual = yf.Ticker(ticker).info.get('regularMarketPrice')
-    sma21 = calcular_sma(data, 21)
-    sma50 = calcular_sma(data, 50)
-    sma200 = calcular_sma(data, 200)
-    rsi = calcular_rsi(data)
-    macd, signal = calcular_macd(data)
-    obv, obvma = calcular_obv(data)
-    
-    # Determinar señal
-    señal = "Mantener"
+	# Descargar datos históricos
+	data = yf.download(ticker, period="12mo", progress=False, auto_adjust=True)
 
-    if ultimo_cierre > sma21 and rsi < 60 and rsi > 30 and macd > signal and obv > obvma and sma21 > sma50 and sma50 > sma200:
-        señal = "Comprar"
-    elif (ultimo_cierre < sma21 or macd < signal) and rsi > 65:
-        señal = "Vender"
+	if data.empty:
+	    return None
 
-    return {
-        'Ticker': ticker,
-        'Cierre': round(ultimo_cierre, 2),
-        'SMA21': round(sma21, 2),
-        'SMA50': round(sma50, 2),
-        'SMA200': round(sma200, 2),
-        'RSI14': round(rsi, 2),
-        'MACD': (True if macd > signal else False),
-        'Señal': señal
-    }
+	# Calcular indicadores técnicos
+	ultimo_cierre = data['Close'].values[-1,0]
+	precio_actual = yf.Ticker(ticker).info.get('regularMarketPrice')
+
+	if ultimo_cierre == precio_actual:
+		ultimo_cierre = data['Close'].values[-2,0]
+
+	sma21 = calcular_sma(data, 21)
+	sma50 = calcular_sma(data, 50)
+	sma200 = calcular_sma(data, 200)
+	rsi = calcular_rsi(data)
+	macd, signal = calcular_macd(data)
+	obv, obvma = calcular_obv(data)
+	adx = calcular_adx(data)
+	upper, middle, lower = calcular_bandas_bollinger(data)
+
+	# Determinar señal
+	señal = "Mantener"
+	tolerancia = 0.01
+	compra_sma = precio_actual > sma21
+	compra_macd = macd > signal
+	compra_obv = (precio_actual > ultimo_cierre and obv > obvma)
+	compra_rsi = (rsi < 60 and rsi > 30)
+	compra_adx = adx > 25
+	compra_bollinger = (abs(precio_actual - lower) < (lower*tolerancia)) and upper > middle*(1+(2*tolerancia)) and lower < middle *(1+(2*tolerancia))
+
+	venta_sma = precio_actual < sma21
+	venta_macd = macd < signal
+	venta_obv = (precio_actual < ultimo_cierre and obv < obvma)
+	venta_rsi = rsi > 70
+	venta_adx = adx > 25
+	venta_bollinger = (abs(precio_actual - upper) < (upper*tolerancia)) and upper > middle*(1+(2*tolerancia)) and lower < middle *(1+(2*tolerancia))
+
+	if (compra_sma or compra_macd or compra_bollinger or compra_obv ) and compra_rsi and compra_adx: #(9,59%)
+		señal = "Comprar (3/5)"
+		if compra_sma and compra_obv: #(0,00%)
+			señal = "Comprar (5/5)"
+		elif compra_obv: #(5,73%)
+			señal = "Comprar (4/5)"
+		elif compra_sma: #(7,81%)
+			señal = "Comprar (3,5/5)"
+
+	elif (venta_sma or venta_macd or venta_obv or venta_bollinger) and venta_rsi and venta_adx:
+		señal = "Vender"
+
+	return {
+		'Ticker': ticker,
+		'Señal': señal,
+		'Cierre': round(precio_actual, 2),
+		'SMA21': round(sma21, 2),
+		'SMA50': round(sma50, 2),
+		'SMA200': round(sma200, 2),
+		'RSI14': round(rsi, 2),
+		'MACD': (True if macd > signal else False),
+		'ADX' : round(adx, 2)
+	}
 
 def calcular_sma(data, periodos:int):
 	return ta.SMA(data['Close'].values[:,0], timeperiod=periodos)[-1]
@@ -54,30 +83,17 @@ def calcular_obv(data):
 
 	return obv[-1], obv_ma[-1]
 
-def calculate_adx(data, periodos=14):
+def calcular_adx(data, periodos=14):
     return ta.ADX(data['High'].values[:,0], data['Low'].values[:,0], data['Close'].values[:,0], timeperiod=periodos)[-1]
 
-def squeeze_momentum(data):
-	# Bollinger Bands (usualmente 20 periodos, 2 desviaciones)
-	upper_bb, middle_bb, lower_bb = ta.BBANDS(data['Close'].values[:,0], timeperiod=20, nbdevup=2, nbdevdn=2, matype=0)
+def calcular_bandas_bollinger(data, length=20, mult=2):
+    # Bollinger Bands con TA-Lib
+	upper_bb, middle_bb, lower_bb = ta.BBANDS(
+	    data['Close'].values[:,0],
+	    timeperiod=length,
+	    nbdevup=mult,
+	    nbdevdn=mult,
+	    matype=0
+	)
 
-	# Keltner Channels (usualmente 20 periodos, factor 1.5)
-	# Keltner Channel central = EMA(20)
-	ema20 = ta.EMA(data['Close'].values[:,0], timeperiod=20)
-	atr = ta.ATR(data['High'].values[:,0], data['Low'].values[:,0], data['Close'].values[:,0], timeperiod=20)
-	upper_kc = ema20 + 1.5 * atr
-	lower_kc = ema20 - 1.5 * atr
-
-	# Condición squeeze: Bollinger Bands dentro de Keltner Channels
-	squeeze_on = (lower_bb > lower_kc) & (upper_bb < upper_kc)
-
-	# Momentum: usar MACD histograma como proxy
-	macd, macdsignal, macdhist = ta.MACD(data['Close'].values[:,0], fastperiod=12, slowperiod=26, signalperiod=9)
-
-	# Squeeze momentum = macd histograma * (1 o -1 según squeeze_on)
-	squeeze_momentum_val = np.where(squeeze_on, macdhist, 0)
-
-	#df['squeeze_on'] = squeeze_on
-	#df['squeeze_momentum'] = squeeze_momentum_val
-
-	return squeeze_on[-1], squeeze_momentum_val[-1]
+	return upper_bb[-1], middle_bb[-1], lower_bb[-1]
