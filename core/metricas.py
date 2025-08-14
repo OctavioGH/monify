@@ -43,13 +43,13 @@ def analizar_ticker(ticker):
 	venta_adx = adx > 25
 	venta_bollinger = (abs(precio_actual - upper) < (upper*tolerancia)) and upper > middle*(1+(2*tolerancia)) and lower < middle *(1+(2*tolerancia))
 
-	if (compra_sma or compra_macd or compra_bollinger or compra_obv ) and compra_rsi and compra_adx: #(9,59%)
+	if (compra_sma or compra_macd or compra_bollinger or compra_obv) and compra_rsi and compra_adx: #(9,59%)
 		señal = "Comprar (3/5)"
-		if compra_sma and compra_obv: #(0,00%)
+		if compra_sma and compra_obv and (compra_macd or compra_bollinger): #(0,00%)
 			señal = "Comprar (5/5)"
-		elif compra_obv: #(5,73%)
+		elif compra_obv and (compra_sma or compra_macd or compra_bollinger): #(5,73%)
 			señal = "Comprar (4/5)"
-		elif compra_sma: #(7,81%)
+		elif compra_sma and (compra_macd or compra_bollinger or compra_obv): #(7,81%)
 			señal = "Comprar (3,5/5)"
 
 	elif (venta_sma or venta_macd or venta_obv or venta_bollinger) and venta_rsi and venta_adx:

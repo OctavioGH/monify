@@ -57,15 +57,21 @@ def calcular_bandas_bollinger(data, length=20, mult=2):
 
 def probar(df):
 
-    # === Descargar datos de Yahoo Finance ===
-    #df = yf.download(ticker, start=start_date, end=end_date, auto_adjust = True)
-
-    # === Calcular SMA 21 ===
+    # ================================================================
+    # Simple Moving Average
+    # ================================================================
     df["SMA21"] = calcular_sma(df, 21)
     #df["SMA50"] = calcular_sma(df, 21)
     #df["SMA200"] = calcular_sma(df, 21)
+
+    # ================================================================
+    # Relative Strenght Index
+    # ================================================================
     df['RSI'] = calcular_rsi(df, 14)
 
+    # ================================================================
+    # Moving Average Convergence Divergence
+    # ================================================================
     df['MACD'], df['Signal_Line'] = calcular_macd(df)
 
     # ================================================================
@@ -73,6 +79,9 @@ def probar(df):
     # ================================================================
     df["OBV"], df["OBV_10"] = calcular_obv(df)
 
+    # ================================================================
+    # Bandas Bollinger
+    # ================================================================
     df['upper_bb'], df['middle_bb'], df['lower_bb'] = calcular_bandas_bollinger(df)
 
     # ================================================================
@@ -80,7 +89,7 @@ def probar(df):
     # ================================================================
     df['ADX'] = calcular_adx(df)
 
-    #print("\n ---------- Estrategia SMA21 + RSI14 + MACD ---------- \n")
+    #print("\n ---------- Estrategia Clásica (SMA21 + RSI14 + MACD) ---------- \n")
 
     ganancia_old = 0
     compre = False
@@ -109,7 +118,7 @@ def probar(df):
 
     #print(f"N° Compras: {cantidad_compras} ; N° Ventas: {cantidad_ventas} ; Ganancias: {round(ganancia_old,2)} ; Trade pos: {trade_positivo_old} ; Trade neg: {trade_negativo_old}")
 
-    #print("\n ---------- Estrategia SMA21 + RSI14 + MACD + OBV10 + ADX---------- \n")
+    #print("\n ---------- Estrategia Nueva (SMA21 + RSI14 + MACD + OBV10 + ADX + Bollinger)---------- \n")
 
     ganancia = 0
     compre = False
@@ -119,13 +128,17 @@ def probar(df):
     trade_positivo = 0
     trade_negativo = 0
 
-    stop_loss = 0
+    # Variables stop loss
+    stop_loss = 0.05
     precio_max = 0
+    bloqueo_stop_loss = 0
+    BLOQUEO_STOP = 3
+    venta_stop_loss = False
 
     precio_viejo = float(df['Close'].iloc[inicio])
 
+    # Variables bandas Bollinger
     tolerancia = 0.01
-
     simultaneo = 0
 
     for precio, sma21, rsi, macd, signal, obv, obvma, adx, upper, middle, lower in zip(df['Close'].values[inicio:].astype(np.float64), df['SMA21'].values[inicio:], df['RSI'].values[inicio:], df['MACD'].values[inicio:], df['Signal_Line'].values[inicio:], df['OBV'].values[inicio:], df['OBV_10'].values[inicio:], df['ADX'].values[inicio:], df['upper_bb'].values[inicio:], df['middle_bb'].values[inicio:], df['lower_bb'].values[inicio:]):
@@ -143,17 +156,28 @@ def probar(df):
         venta_rsi = rsi > 70
         venta_adx = adx > 25
         venta_bollinger = (abs(precio - upper) < (upper*tolerancia)) and upper > middle*(1+(2*tolerancia)) and lower < middle *(1+(2*tolerancia))
+
+        if venta_stop_loss:
+            bloqueo_stop_loss -= 1
+            if bloqueo_stop_loss <= 0:
+                venta_stop_loss = False
+        elif compre and precio > precio_max:
+            precio_max = precio
+        elif compre and (precio_max - precio) < (precio_max*stop_loss):
+            venta_stop_loss = True
+            bloqueo_stop_loss = BLOQUEO_STOP
         
         if compra_bollinger and venta_bollinger:
             print(f"Precio: {precio} ; Upper: {upper} ; middle: {middle} ; lower: {lower}")
             print(f"Compro: {compra_bollinger} ; Vendo: {venta_bollinger}")
             simultaneo +=1
 
-        if (compra_sma or compra_macd or compra_obv or compra_bollinger) and compra_rsi and compra_adx and not compre:
+        if (compra_sma or compra_macd or compra_obv or compra_bollinger) and compra_rsi and compra_adx and not compre and not venta_stop_loss:
             compre = True
             cantidad_compras += 1
             precio_compra = precio
-        elif (venta_sma or venta_macd or venta_obv or venta_bollinger) and venta_rsi and venta_adx and compre:
+            precio_max = precio
+        elif ((venta_sma or venta_macd or venta_obv or venta_bollinger or venta_stop_loss) and venta_rsi and venta_adx) and compre:
             compre = False
             cantidad_ventas += 1
             ganancia += (precio - precio_compra)
@@ -161,9 +185,6 @@ def probar(df):
                 trade_positivo += 1
             else:
                 trade_negativo += 1
-
-        if compre and precio > precio_max:
-            precio_max = precio
 
         precio_viejo = precio
 
@@ -191,7 +212,7 @@ if __name__ == "__main__":
         exit()
 
     # descargar_datos(tickers)
-
+    
     #print("Analizando acciones...")
     trade_pos = 0
     trade_neg = 0
@@ -219,7 +240,7 @@ if __name__ == "__main__":
         trade_neg_old += trade_neg_old_aux
         ganancia_old += aux_old
 
-    print("---------- Estrategia SMA21 and OBV10 (or MACD or Bollinger) and RSI14 and ADX ----------")
+    print("---------- Estrategia (SMA21 or OBV10 or MACD or Bollinger) and RSI14 and ADX + Stop loss----------")
     print(f"Ganancia: {round(ganancia,2)} ; Trade pos: {trade_pos} ; Trade neg: {trade_neg} ; Error: {round(trade_neg/(trade_neg+trade_pos)*100,2)}%")
     print(f"Ganancia old: {round(ganancia_old,2)} ; Trade pos: {trade_pos_old} ; Trade neg: {trade_neg_old} ; Error: {round(trade_neg_old/(trade_neg_old+trade_pos_old)*100,2)}%")
     print(f"Diferencia: {round(ganancia - ganancia_old,2)} ; Dif %: {round((ganancia - ganancia_old)*100/ganancia_old,2)} ; Trade pos: {trade_pos - trade_pos_old} ; Trade neg: {trade_neg - trade_neg_old} ; N Trades: {trade_pos+trade_neg- trade_neg_old - trade_pos_old}")

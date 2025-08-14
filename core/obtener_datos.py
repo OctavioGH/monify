@@ -12,17 +12,17 @@ def descargar_datos(ruta_datos, ticker, periodo="1y", intervalo="1d"):
 
     """
     try:
-        print(f"📥 Descargando datos de {ticker} desde Yahoo Finance...")
+        print(f"Descargando datos de {ticker} desde Yahoo Finance...")
         data = yf.download(ticker, period=periodo, interval=intervalo, auto_adjust = True)
 
         if data.empty:
-            print(f"⚠ No se encontraron datos para {ticker}.")
+            print(f"No se encontraron datos para {ticker}.")
             return
 
         ticker = ticker.split('.')[0]
         nombre_archivo = f"{ruta_datos}{ticker}.csv"
         data.to_csv(nombre_archivo)
-        print(f"✅ Datos guardados en '{nombre_archivo}'.")
+        print(f"Datos guardados en '{nombre_archivo}'.")
 
     except Exception as e:
         print(f"❌ Error descargando datos de {ticker}: {e}")
