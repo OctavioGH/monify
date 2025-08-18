@@ -3,6 +3,9 @@ import pandas as pd
 import core
 import os
 
+from rich.console import Console
+from rich.table import Table
+
 RUTA_TICKERS = "data/lista_acciones.txt"
 RUTA_TRANSACCIONES = "data/historial_transacciones.csv"
 RUTA_PORTAFOLIO = "data/portafolio.csv"
@@ -31,9 +34,21 @@ def analizar_acciones():
                 resultados.append(resultado)
 
     if resultados:
-        data = pd.DataFrame(resultados).sort_values(by='Señal', ascending=True)
+        df = pd.DataFrame(resultados).sort_values(by='Señal', ascending=True)
+
+        table = Table(show_header=True, header_style="bold magenta")
+
+        for col in df.columns:
+            table.add_column(col)
+
+        for _, row in df.iterrows():
+            table.add_row(*[str(x) for x in row.values])
+
+        # Mostrar tabla
+        console = Console()
+        
         print("\n--------------- Resultados del análisis técnico: ---------------\n")
-        print(data.to_string(index=False))
+        console.print(table)
         print()
     else:
         print("No se obtuvieron resultados válidos")

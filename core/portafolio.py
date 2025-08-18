@@ -127,6 +127,11 @@ def _actualizar_portafolio(ruta_portafolio, transaccion):
     else:
         cuentas = pd.DataFrame(columns=["ticker", "cantidad", "precio_promedio"])
 
+    ticker = transaccion["ticker"].iloc[0]
+    tipo = transaccion["tipo"].iloc[0]
+    cantidad = transaccion["cantidad"].iloc[0]
+    precio_unitario = transaccion["precio_unitario"].iloc[0]
+
     # Busco el ticker correspondiente
     if ticker in cuentas["ticker"].values:
         idx = cuentas.index[cuentas["ticker"] == ticker][0]

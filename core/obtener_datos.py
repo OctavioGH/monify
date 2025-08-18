@@ -25,7 +25,7 @@ def descargar_datos(ruta_datos, ticker, periodo="1y", intervalo="1d"):
         print(f"Datos guardados en '{nombre_archivo}'.")
 
     except Exception as e:
-        print(f"❌ Error descargando datos de {ticker}: {e}")
+        print(f"Error descargando datos de {ticker}: {e}")
 
 def cargar_csv(ruta_archivo):
     """
